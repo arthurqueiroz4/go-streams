@@ -7,8 +7,8 @@ import (
 )
 
 type CsvHandler struct {
-	csvReader csv.Reader
-	comman    rune
+	csvReader *csv.Reader
+	file      *os.File
 }
 
 func New(filepath string, comman rune) *CsvHandler {
@@ -16,9 +16,20 @@ func New(filepath string, comman rune) *CsvHandler {
 	if err != nil {
 		log.Panic(err)
 	}
-
-	return &CsvHandler{
-		*csv.NewReader(f),
-		comman,
+	c := &CsvHandler{
+		csv.NewReader(f),
+		f,
 	}
+	c.csvReader.LazyQuotes = false
+	c.csvReader.Comma = comman
+	return c
 }
+
+func (c *CsvHandler) Get() ([]string, error) {
+	return c.csvReader.Read()
+}
+
+// TODO Insted of 'any' I can use a interface
+// func (c *CsvHandler) Chunk[T any]() *T {
+// 	c.csvReader.
+// }
