@@ -2,34 +2,36 @@ package csv
 
 import (
 	"encoding/csv"
-	"log"
+	"go-stream/model"
 	"os"
 )
 
-type CsvHandler struct {
-	csvReader *csv.Reader
-	file      *os.File
+type CsvHandler[T any] struct {
+	Mapper     model.DataMapper[T]
+	ResponseCh chan<- *T
+	EOFCh      chan<- error
+	Filename   string
 }
 
-func New(filepath string, comman rune) *CsvHandler {
-	f, err := os.Open(filepath)
+func (c *CsvHandler[T]) Chunk() *T {
+	file, err := os.Open(c.Filename)
 	if err != nil {
-		log.Panic(err)
+		return nil
 	}
-	c := &CsvHandler{
-		csv.NewReader(f),
-		f,
+	defer file.Close()
+
+	r := csv.NewReader(file)
+
+	for {
+		record, err := r.Read()
+		if err != nil {
+			if err.Error() == "EOF" {
+				c.EOFCh <- err
+			}
+			return nil
+		}
+		t, _ := c.Mapper.Map(record)
+
+		c.ResponseCh <- t
 	}
-	c.csvReader.LazyQuotes = false
-	c.csvReader.Comma = comman
-	return c
 }
-
-func (c *CsvHandler) Get() ([]string, error) {
-	return c.csvReader.Read()
-}
-
-// TODO Insted of 'any' I can use a interface
-// func (c *CsvHandler) Chunk[T any]() *T {
-// 	c.csvReader.
-// }

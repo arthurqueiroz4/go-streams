@@ -1,29 +1,42 @@
 package main
 
 import (
+	"encoding/json"
 	"go-stream/csv"
+	"go-stream/model"
 	"go-stream/server"
-	"log"
 	"net/http"
 )
 
 func main() {
-	ch := csv.New("./cars_2010_2020.csv", ',')
-
 	mux := http.NewServeMux()
+
+	reponseCh := make(chan *model.Car)
+	eofCh := make(chan error)
+
+	ch := setupCsvHandler(reponseCh, eofCh)
 
 	mux.HandleFunc("/large-file",
 		func(w http.ResponseWriter, r *http.Request) {
-			record, err := ch.Get()
-			if err != nil {
-				log.Panic(err)
-			}
-			buf := make([]byte, 0)
-			for _, v := range record {
-				buf = append(buf, []byte(v+"\n")...)
+			go ch.Chunk()
+
+			flusher, ok := w.(http.Flusher)
+			if !ok {
+				http.Error(w, "Streaming not supported", http.StatusInternalServerError)
+				return
 			}
 
-			w.Write([]byte(buf))
+			for {
+				select {
+				case car := <-reponseCh:
+					json, _ := json.Marshal(car)
+					json = append(json, '\n')
+					w.Write(json)
+					flusher.Flush()
+				case <-eofCh:
+					return
+				}
+			}
 		})
 
 	s := server.New(
@@ -33,4 +46,13 @@ func main() {
 	)
 
 	s.Start()
+}
+
+func setupCsvHandler(reponseCh chan *model.Car, eofCh chan error) *csv.CsvHandler[model.Car] {
+	return &csv.CsvHandler[model.Car]{
+		Filename:   "./cars_2010_2020.csv",
+		Mapper:     &model.CarMapper{},
+		ResponseCh: reponseCh,
+		EOFCh:      eofCh,
+	}
 }
