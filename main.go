@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"go-stream/csv"
+	"go-stream/middleware"
 	"go-stream/model"
 	"go-stream/server"
 	"net/http"
@@ -16,9 +17,9 @@ func main() {
 
 	ch := setupCsvHandler(reponseCh, eofCh)
 
-	mux.HandleFunc("/large-file",
-		func(w http.ResponseWriter, r *http.Request) {
-			go ch.Chunk()
+	mux.Handle("/stream-file", middleware.TimingMid(
+		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			go ch.Chunking()
 
 			flusher, ok := w.(http.Flusher)
 			if !ok {
@@ -37,7 +38,7 @@ func main() {
 					return
 				}
 			}
-		})
+		})))
 
 	s := server.New(
 		server.WithAddr("localhost"),
